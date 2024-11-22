@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Weather Control Panel</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 600px; }
+        #control-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border: 2px solid black;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Global Weather Control Panel</h1>
+    <div id="control-panel">
+        <h3>Admin Panel</h3>
+        <input type="password" id="password" placeholder="Enter Password" />
+        <button onclick="unlockPanel()">Unlock</button>
+        <div id="panel-actions" style="display:none;">
+            <select id="weather-type">
+                <option value="rain-green">Light Rain (Green)</option>
+                <option value="rain-yellow">Moderate Rain (Yellow)</option>
+                <option value="rain-orange">Heavy Rain (Orange)</option>
+                <option value="rain-red">Very Heavy Rain (Red)</option>
+                <option value="rain-pink">Intense Rain (Pink)</option>
+                <option value="rain-light-pink">Extreme Rainfall (Light Pink)</option>
+                <option value="tornado">Tornado (Red Marker)</option>
+                <option value="pds-tornado">PDS Tornado (Pink Marker)</option>
+            </select>
+            <button onclick="startDrawing()">Start Drawing/Marking</button>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([39.8283, -98.5795], 5); // Center on the U.S.
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Layers for rain polygons and weather markers
+        var rainLayer = L.layerGroup().addTo(map);
+        var markerLayer = L.layerGroup().addTo(map);
+
+        // Define rain colors
+        var rainColors = {
+            "rain-green": "green",
+            "rain-yellow": "yellow",
+            "rain-orange": "orange",
+            "rain-red": "red",
+            "rain-pink": "pink",
+            "rain-light-pink": "lightpink"
+        };
+
+        // Authentication for control panel
+        const adminPassword = "admin123"; // Change this password
+        function unlockPanel() {
+            const passwordInput = document.getElementById("password").value;
+            if (passwordInput === adminPassword) {
+                document.getElementById("panel-actions").style.display = "block";
+                alert("Panel unlocked!");
+            } else {
+                alert("Incorrect password!");
+            }
+        }
+
+        // Drawing and marking functionality
+        var drawingPolygon = false;
+        var tempPolygon = [];
+        function startDrawing() {
+            const selectedType = document.getElementById("weather-type").value;
+
+            if (selectedType.startsWith("rain-")) {
+                if (!drawingPolygon) {
+                    drawingPolygon = true;
+                    tempPolygon = [];
+                    alert("Click on the map to draw the rain polygon. Double-click to finish.");
+                } else {
+                    alert("Already in drawing mode. Double-click to finish.");
+                }
+
+                map.on("click", function(e) {
+                    if (drawingPolygon) {
+                        tempPolygon.push([e.latlng.lat, e.latlng.lng]);
+                        L.circleMarker(e.latlng, { radius: 5, color: rainColors[selectedType] }).addTo(rainLayer);
+                    }
+                });
+
+                map.on("dblclick", function() {
+                    if (drawingPolygon) {
+                        L.polygon(tempPolygon, { color: rainColors[selectedType], fillOpacity: 0.5 }).addTo(rainLayer);
+                        tempPolygon = [];
+                        drawingPolygon = false;
+                        alert("Rain polygon added!");
+                    }
+                });
+            } else {
+                map.once("click", function(e) {
+                    const markerOptions = selectedType === "tornado"
+                        ? { color: "red", text: "Tornado" }
+                        : { color: "pink", text: "PDS Tornado" };
+
+                    const marker = L.circleMarker(e.latlng, { color: markerOptions.color, radius: 8 })
+                        .bindPopup(markerOptions.text)
+                        .addTo(markerLayer);
+                    marker.openPopup();
+                    alert(markerOptions.text + " marker added!");
+                });
+
+                alert("Click on the map to place the severe weather marker.");
+            }
+        }
+    </script>
+</body>
+</html>
