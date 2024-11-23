@@ -3,200 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Radar with Directions and Weather Polygons</title>
+    <title>Global Weather Radar with Warnings and Advisories</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <style>
         #map { height: 600px; }
-        #directions-container { margin: 10px; }
+        #controls { margin: 10px; }
+        .label {
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 3px black;
+        }
     </style>
 </head>
 <body>
-    <h1>Weather Radar with Directions and Weather Polygons</h1>
-    <div id="directions-container">
+    <h1>Global Weather Radar with Warnings and Advisories</h1>
+    <div id="controls">
         <input type="text" id="start-location" placeholder="Enter Start Location" />
         <input type="text" id="end-location" placeholder="Enter End Location" />
         <button onclick="getDirections()">Get Directions</button>
-    </div>
-    <div>
+        <br><br>
         <select id="weather-type">
-            <option value="tornado-red">Tornado (Red)</option>
-            <option value="heavy-rain-red">Heavy Intense Rain (Red)</option>
-            <option value="hail-core-pink">Hail Core (Pink)</option>
-            <option value="pds-tornado-warning-pink">PDS Tornado Warning (Pink)</option>
-            <option value="intense-orange">Intense Rain (Orange)</option>
-            <option value="moderate-yellow">Moderate Rain (Yellow)</option>
-            <option value="light-green">Light Rain (Green)</option>
-            <option value="lightest-light-green">Lightest Rain (Light Green)</option>
+            <optgroup label="Warnings">
+                <option value="tornado-red">Tornado Warning (Red)</option>
+                <option value="heavy-rain-red">Heavy Rain Warning (Dark Red)</option>
+                <option value="flash-flood-blue">Flash Flood Warning (Blue)</option>
+                <option value="coastal-flood-teal">Coastal Flood Warning (Teal)</option>
+                <option value="freeze-light-blue">Freeze Warning (Light Blue)</option>
+                <option value="heat-wave-dark-red">Heat Wave Warning (Dark Red)</option>
+            </optgroup>
+            <optgroup label="Advisories">
+                <option value="wind-gray">Wind Advisory (Gray)</option>
+                <option value="flood-light-blue">Flood Advisory (Light Blue)</option>
+                <option value="thunderstorm-dark-yellow">Severe Thunderstorm Advisory (Dark Yellow)</option>
+                <option value="extreme-heat-orange-red">Extreme Heat Advisory (Orange-Red)</option>
+            </optgroup>
         </select>
-        <button onclick="startDrawing()">Start Drawing Polygon</button>
+        <button onclick="addWeatherPolygon()">Add Weather Alert</button>
     </div>
     <div id="map"></div>
 
     <script>
-        var map = L.map('map').setView([39.8283, -98.5795], 5);  // Center on the U.S.
+        var map = L.map('map').setView([20, 0], 2);  // Global view
 
         // Base Layer: OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Add geocoder control
-        L.Control.geocoder().addTo(map);
+        // Define colors for each alert
+        var alertColors = {
+            "tornado-red": "red",
+            "heavy-rain-red": "darkred",
+            "flash-flood-blue": "blue",
+            "coastal-flood-teal": "teal",
+            "freeze-light-blue": "lightblue",
+            "heat-wave-dark-red": "darkred",
+            "wind-gray": "gray",
+            "flood-light-blue": "lightblue",
+            "thunderstorm-dark-yellow": "darkyellow",
+            "extreme-heat-orange-red": "orangered"
+        };
 
-        var routingControl;
-        var drawingPolygon = false;
-        var tempPolygon = [];
-        var polygonColor = "";
-        var polygonText = "";
-
-        // Function to start drawing polygons
-        function startDrawing() {
-            const selectedType = document.getElementById("weather-type").value;
-
-            // Set polygon color and text based on selected weather type
-            if (selectedType === "tornado-red") {
-                polygonColor = "red";
-                polygonText = "Tornado";
-            }
-            else if (selectedType === "heavy-rain-red") {
-                polygonColor = "darkred";
-                polygonText = "Heavy Intense Rain";
-            }
-            else if (selectedType === "hail-core-pink") {
-                polygonColor = "pink";
-                polygonText = "Hail Core";
-            }
-            else if (selectedType === "pds-tornado-warning-pink") {
-                polygonColor = "pink";
-                polygonText = "PDS Tornado Warning";
-            }
-            else if (selectedType === "intense-orange") {
-                polygonColor = "orange";
-                polygonText = "Intense Rain";
-            }
-            else if (selectedType === "moderate-yellow") {
-                polygonColor = "yellow";
-                polygonText = "Moderate Rain";
-            }
-            else if (selectedType === "light-green") {
-                polygonColor = "green";
-                polygonText = "Light Rain";
-            }
-            else if (selectedType === "lightest-light-green") {
-                polygonColor = "lightgreen";
-                polygonText = "Lightest Rain";
-            }
-
-            if (!drawingPolygon) {
-                drawingPolygon = true;
-                tempPolygon = [];
-                alert("Click on the map to create polygons. Double-click to finish.");
-            } else {
-                alert("Already in drawing mode. Double-click to finish.");
-            }
-
-            map.on("click", function(e) {
-                if (drawingPolygon) {
-                    const lat = e.latlng.lat;
-                    const lng = e.latlng.lng;
-
-                    // Adjust the polygon size based on the weather type
-                    let largeOffset = 0;
-                    if (polygonText === "Hail Core" || polygonText === "PDS Tornado Warning") {
-                        largeOffset = 1;  // Smaller polygons for hail and PDS Tornado
-                    } else if (polygonText === "Tornado" || polygonText === "Heavy Intense Rain") {
-                        largeOffset = 5;  // Larger polygons for Tornado and Heavy Intense Rain
-                    } else {
-                        largeOffset = 3;  // Medium size polygons for other weather types
-                    }
-
-                    // Add the points for the polygon
-                    tempPolygon.push([lat, lng]);
-                    tempPolygon.push([lat + largeOffset, lng]);
-                    tempPolygon.push([lat, lng + largeOffset]);
-                    tempPolygon.push([lat - largeOffset, lng]);
-                    tempPolygon.push([lat, lng - largeOffset]);
-
-                    // Add a temporary polygon to the map
-                    var polygon = L.polygon(tempPolygon, { color: polygonColor }).addTo(map);
-
-                    // Add text label to the polygon
-                    L.tooltip({
-                        permanent: true,
-                        direction: 'center'
-                    }).setContent(polygonText).setLatLng(polygon.getBounds().getCenter()).addTo(map);
-                }
-            });
-        }
-
-        // Finish drawing polygon on double click
-        map.on("dblclick", function() {
-            if (drawingPolygon) {
-                drawingPolygon = false;
-                alert("Polygon drawing completed!");
-                // Finalize the polygon and show the time it was created
-                const timeNow = new Date().toLocaleString();
-                alert(`Polygon completed at: ${timeNow}`);
-            }
+        // Add user location marker
+        navigator.geolocation.getCurrentPosition(function (position) {
+            var userLat = position.coords.latitude;
+            var userLng = position.coords.longitude;
+            var userMarker = L.marker([userLat, userLng]).addTo(map);
+            userMarker.bindPopup("You are here!").openPopup();
+            map.setView([userLat, userLng], 8);  // Zoom in to user location
         });
 
-        // Convert meters to miles
-        function metersToMiles(meters) {
-            return (meters * 0.000621371).toFixed(2);  // Converts meters to miles
+        // Function to add weather polygons
+        function addWeatherPolygon() {
+            var weatherType = document.getElementById('weather-type').value;
+            var color = alertColors[weatherType];
+            var latlngs = [
+                [40, -100], [45, -100], [45, -95], [40, -95]  // Example polygon coordinates
+            ];
+            var polygon = L.polygon(latlngs, { color: color }).addTo(map);
+            var label = weatherType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            polygon.bindTooltip(`<span class='label'>${label}</span>`, { permanent: true, direction: 'center' });
         }
 
-        // Function to get directions between two locations
+        // Function to get directions
         function getDirections() {
-            var start = document.getElementById("start-location").value;
-            var end = document.getElementById("end-location").value;
-            var geocoder = L.Control.Geocoder.nominatim();
+            var startLocation = document.getElementById('start-location').value;
+            var endLocation = document.getElementById('end-location').value;
 
-            geocoder.geocode(start, function(results) {
-                if (results.length === 0) {
-                    alert("Start location not found.");
-                    return;
-                }
-                var startLatLng = results[0].center;
+            if (!startLocation || !endLocation) {
+                alert("Please enter both start and end locations.");
+                return;
+            }
 
-                geocoder.geocode(end, function(results) {
-                    if (results.length === 0) {
-                        alert("End location not found.");
-                        return;
-                    }
-                    var endLatLng = results[0].center;
-
-                    if (routingControl) {
-                        map.removeControl(routingControl);  // Remove existing directions
-                    }
-
-                    routingControl = L.Routing.control({
-                        waypoints: [
-                            L.latLng(startLatLng.lat, startLatLng.lng),
-                            L.latLng(endLatLng.lat, endLatLng.lng)
-                        ],
-                        routeWhileDragging: true,
-                        createMarker: function() { return null; }
-                    }).addTo(map);
-
-                    routingControl.on('routesfound', function(e) {
-                        var route = e.routes[0];
-                        var distance = route.summary.totalDistance;
-                        var miles = metersToMiles(distance);
-                        alert("Total distance: " + miles + " miles");
-                    });
-                });
-            });
+            L.Routing.control({
+                waypoints: [
+                    L.latLng(startLocation),
+                    L.latLng(endLocation)
+                ],
+                routeWhileDragging: true
+            }).addTo(map);
         }
-
-        // Locate user on page load
-        window.onload = function() {
-            // Optionally, you can get weather for user's location here as well.
-            getWeather("New York");  // Example city for weather check
-        };
     </script>
 </body>
 </html>
+
 
