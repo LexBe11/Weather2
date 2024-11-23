@@ -52,7 +52,10 @@
                 <option value="lightest-rain">Lightest Rain (Light Green)</option>
                 <option value="unknown">Unknown Weather Statement (Gray)</option>
             </select>
+            <input type="number" id="expiration-time" placeholder="Time to expire (hours)" />
+            <button onclick="setAddingPolygon(true)">Select Location</button>
             <button onclick="addPolygon()">Add Polygon</button>
+            <button onclick="deleteLastPolygon()">Delete Last Polygon</button>
         </div>
     </div>
 
@@ -63,28 +66,6 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
-
-        // Initialize user location marker
-        let userMarker = null;
-
-        // Locate and mark the user's location
-        function locateUser() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    const userLat = position.coords.latitude;
-                    const userLon = position.coords.longitude;
-
-                    if (userMarker) map.removeLayer(userMarker);
-
-                    userMarker = L.marker([userLat, userLon]).addTo(map).bindPopup("You are here!").openPopup();
-                    map.setView([userLat, userLon], 10);
-                });
-            } else {
-                alert("Geolocation is not supported by this browser.");
-            }
-        }
-
-        locateUser();
 
         // Colors for different weather types
         const weatherColors = {
@@ -104,6 +85,9 @@
         };
 
         const polygons = []; // Store all polygons for global visibility
+        let addingPolygon = false; // Flag to track if polygon creation is active
+        let currentClickLocation = null; // Store the last click location for polygon creation
+        let ttsAlreadySpoken = false; // To track whether TTS has been spoken to avoid repetition
 
         // Password validation for control panel access
         function validatePassword() {
@@ -116,28 +100,88 @@
             }
         }
 
+        // Set adding polygon mode on
+        function setAddingPolygon(value) {
+            addingPolygon = value;
+            if (addingPolygon) {
+                alert("Click on the map to select the location for the polygon.");
+            }
+        }
+
         // Add polygon to map
         function addPolygon() {
+            if (!currentClickLocation) {
+                alert("Please click a location on the map first.");
+                return;
+            }
+
             const alertType = document.getElementById('alert-type').value;
             const color = weatherColors[alertType] || 'gray';
+            const expirationTime = document.getElementById('expiration-time').value || 3; // Default to 3 hours
 
-            const bounds = [
-                [Math.random() * 10 + 30, Math.random() * -10 - 90], // Randomize coordinates
-                [Math.random() * 10 + 40, Math.random() * -20 - 80]
-            ];
+            // Adjust the size of the polygon based on alert type
+            let radius = 0.05; // Default size
+            switch (alertType) {
+                case 'tornado':
+                    radius = 0.1; // Larger for tornadoes
+                    break;
+                case 'pds-tornado':
+                    radius = 0.15; // Even larger for PDS tornadoes
+                    break;
+                case 'hail-core':
+                    radius = 0.02; // Smaller for hail core
+                    break;
+                case 'heavy-rain':
+                    radius = 0.1;
+                    break;
+                // Add more cases as needed
+            }
 
-            const polygon = L.polygon(bounds, { color, fillColor: color, fillOpacity: 0.5 }).addTo(map);
+            // Create a circle for the polygon at the clicked position
+            const polygon = L.circle(currentClickLocation, { 
+                radius: radius * 100000, // Scale radius for visual effect
+                color: color, 
+                fillColor: color, 
+                fillOpacity: 0.5
+            }).addTo(map);
             polygons.push(polygon);
 
-            const label = L.marker(bounds[0], {
+            // Add a label to the polygon
+            const label = L.marker(currentClickLocation, {
                 icon: L.divIcon({
                     className: 'polygon-label',
                     html: `<span>${alertType.replace(/-/g, ' ').toUpperCase()}</span>`
                 })
             }).addTo(map);
 
-            // Announce weather alert with TTS
-            announceAlert(alertType);
+            // Announce weather alert with TTS, only if not already spoken
+            if (!ttsAlreadySpoken) {
+                announceAlert(alertType);
+                ttsAlreadySpoken = true;
+            }
+
+            // Set expiration time for polygon if specified
+            const expirationDate = new Date().getTime() + expirationTime * 3600000; // Convert hours to milliseconds
+            setTimeout(() => {
+                map.removeLayer(polygon);
+                map.removeLayer(label);
+                alert(`${alertType.replace(/-/g, ' ')} polygon has expired and been removed.`);
+            }, expirationTime * 3600000); // Convert hours to milliseconds
+
+            // Reset the adding polygon flag and location
+            addingPolygon = false;
+            currentClickLocation = null;
+        }
+
+        // Delete the last polygon added
+        function deleteLastPolygon() {
+            if (polygons.length > 0) {
+                const lastPolygon = polygons.pop();
+                map.removeLayer(lastPolygon);
+                alert("Last polygon has been deleted.");
+            } else {
+                alert("No polygons to delete.");
+            }
         }
 
         // Text-to-speech announcement
@@ -146,11 +190,17 @@
             window.speechSynthesis.speak(msg);
         }
 
-        // Automatically locate the user upon page load
-        window.onload = () => locateUser();
+        // Add click listener to map to choose the location for the polygon
+        map.on('click', function(e) {
+            if (addingPolygon) {
+                currentClickLocation = e.latlng;
+                alert("Location selected. Now click 'Add Polygon' to place it.");
+            }
+        });
     </script>
 </body>
 </html>
+
 
 
 
