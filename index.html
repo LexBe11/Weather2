@@ -3,112 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Weather Radar with Warnings and Advisories</title>
+    <title>Global Weather Monitoring System</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <style>
         #map { height: 600px; }
-        #controls { margin: 10px; }
-        .label {
-            font-size: 12px;
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            z-index: 1000;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .polygon-label {
             font-weight: bold;
-            color: white;
-            text-shadow: 1px 1px 3px black;
+            font-size: 12px;
+            color: black;
         }
     </style>
 </head>
 <body>
-    <h1>Global Weather Radar with Warnings and Advisories</h1>
-    <div id="controls">
-        <input type="text" id="start-location" placeholder="Enter Start Location" />
-        <input type="text" id="end-location" placeholder="Enter End Location" />
-        <button onclick="getDirections()">Get Directions</button>
-        <br><br>
-        <select id="weather-type">
-            <optgroup label="Warnings">
-                <option value="tornado-red">Tornado Warning (Red)</option>
-                <option value="heavy-rain-red">Heavy Rain Warning (Dark Red)</option>
-                <option value="flash-flood-blue">Flash Flood Warning (Blue)</option>
-                <option value="coastal-flood-teal">Coastal Flood Warning (Teal)</option>
-                <option value="freeze-light-blue">Freeze Warning (Light Blue)</option>
-                <option value="heat-wave-dark-red">Heat Wave Warning (Dark Red)</option>
-            </optgroup>
-            <optgroup label="Advisories">
-                <option value="wind-gray">Wind Advisory (Gray)</option>
-                <option value="flood-light-blue">Flood Advisory (Light Blue)</option>
-                <option value="thunderstorm-dark-yellow">Severe Thunderstorm Advisory (Dark Yellow)</option>
-                <option value="extreme-heat-orange-red">Extreme Heat Advisory (Orange-Red)</option>
-            </optgroup>
-        </select>
-        <button onclick="addWeatherPolygon()">Add Weather Alert</button>
-    </div>
+    <h1>Global Weather Monitoring System</h1>
     <div id="map"></div>
 
-    <script>
-        var map = L.map('map').setView([20, 0], 2);  // Global view
+    <div class="control-panel">
+        <h3>Control Panel</h3>
+        <input type="password" id="password" placeholder="Enter password" />
+        <button onclick="validatePassword()">Login</button>
+        <div id="alert-controls" style="display: none;">
+            <h4>Issue Weather Alert</h4>
+            <select id="alert-type">
+                <option value="tornado">Tornado Warning (Red)</option>
+                <option value="pds-tornado">PDS Tornado Warning (Pink)</option>
+                <option value="hail-core">Hail Core (Pink, Small)</option>
+                <option value="heavy-rain">Heavy Rain Warning (Red)</option>
+                <option value="flash-flood">Flash Flood Warning (Blue)</option>
+                <option value="coastal-flood">Coastal Flood Warning (Teal)</option>
+                <option value="freeze">Freeze Alert (Light Blue)</option>
+                <option value="heat-wave">Heat Wave Alert (Orange)</option>
+                <option value="intense-rain">Intense Rain (Orange)</option>
+                <option value="moderate-rain">Moderate Rain (Yellow)</option>
+                <option value="light-rain">Light Rain (Green)</option>
+                <option value="lightest-rain">Lightest Rain (Light Green)</option>
+                <option value="unknown">Unknown Weather Statement (Gray)</option>
+            </select>
+            <button onclick="addPolygon()">Add Polygon</button>
+        </div>
+    </div>
 
-        // Base Layer: OpenStreetMap
+    <script>
+        const map = L.map('map').setView([39.8283, -98.5795], 5); // Center on the U.S.
+
+        // Add base map layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // Define colors for each alert
-        var alertColors = {
-            "tornado-red": "red",
-            "heavy-rain-red": "darkred",
-            "flash-flood-blue": "blue",
-            "coastal-flood-teal": "teal",
-            "freeze-light-blue": "lightblue",
-            "heat-wave-dark-red": "darkred",
-            "wind-gray": "gray",
-            "flood-light-blue": "lightblue",
-            "thunderstorm-dark-yellow": "darkyellow",
-            "extreme-heat-orange-red": "orangered"
+        // Initialize user location marker
+        let userMarker = null;
+
+        // Locate and mark the user's location
+        function locateUser() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    const userLat = position.coords.latitude;
+                    const userLon = position.coords.longitude;
+
+                    if (userMarker) map.removeLayer(userMarker);
+
+                    userMarker = L.marker([userLat, userLon]).addTo(map).bindPopup("You are here!").openPopup();
+                    map.setView([userLat, userLon], 10);
+                });
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        locateUser();
+
+        // Colors for different weather types
+        const weatherColors = {
+            'tornado': 'red',
+            'pds-tornado': 'pink',
+            'hail-core': 'pink',
+            'heavy-rain': 'red',
+            'flash-flood': 'blue',
+            'coastal-flood': 'teal',
+            'freeze': 'lightblue',
+            'heat-wave': 'orange',
+            'intense-rain': 'orange',
+            'moderate-rain': 'yellow',
+            'light-rain': 'green',
+            'lightest-rain': 'lightgreen',
+            'unknown': 'gray'
         };
 
-        // Add user location marker
-        navigator.geolocation.getCurrentPosition(function (position) {
-            var userLat = position.coords.latitude;
-            var userLng = position.coords.longitude;
-            var userMarker = L.marker([userLat, userLng]).addTo(map);
-            userMarker.bindPopup("You are here!").openPopup();
-            map.setView([userLat, userLng], 8);  // Zoom in to user location
-        });
+        const polygons = []; // Store all polygons for global visibility
 
-        // Function to add weather polygons
-        function addWeatherPolygon() {
-            var weatherType = document.getElementById('weather-type').value;
-            var color = alertColors[weatherType];
-            var latlngs = [
-                [40, -100], [45, -100], [45, -95], [40, -95]  // Example polygon coordinates
-            ];
-            var polygon = L.polygon(latlngs, { color: color }).addTo(map);
-            var label = weatherType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            polygon.bindTooltip(`<span class='label'>${label}</span>`, { permanent: true, direction: 'center' });
-        }
-
-        // Function to get directions
-        function getDirections() {
-            var startLocation = document.getElementById('start-location').value;
-            var endLocation = document.getElementById('end-location').value;
-
-            if (!startLocation || !endLocation) {
-                alert("Please enter both start and end locations.");
-                return;
+        // Password validation for control panel access
+        function validatePassword() {
+            const password = document.getElementById('password').value;
+            if (password === "weather123") {
+                alert("Access granted!");
+                document.getElementById('alert-controls').style.display = 'block';
+            } else {
+                alert("Invalid password!");
             }
-
-            L.Routing.control({
-                waypoints: [
-                    L.latLng(startLocation),
-                    L.latLng(endLocation)
-                ],
-                routeWhileDragging: true
-            }).addTo(map);
         }
+
+        // Add polygon to map
+        function addPolygon() {
+            const alertType = document.getElementById('alert-type').value;
+            const color = weatherColors[alertType] || 'gray';
+
+            const bounds = [
+                [Math.random() * 10 + 30, Math.random() * -10 - 90], // Randomize coordinates
+                [Math.random() * 10 + 40, Math.random() * -20 - 80]
+            ];
+
+            const polygon = L.polygon(bounds, { color, fillColor: color, fillOpacity: 0.5 }).addTo(map);
+            polygons.push(polygon);
+
+            const label = L.marker(bounds[0], {
+                icon: L.divIcon({
+                    className: 'polygon-label',
+                    html: `<span>${alertType.replace(/-/g, ' ').toUpperCase()}</span>`
+                })
+            }).addTo(map);
+
+            // Announce weather alert with TTS
+            announceAlert(alertType);
+        }
+
+        // Text-to-speech announcement
+        function announceAlert(alertType) {
+            const msg = new SpeechSynthesisUtterance(`A ${alertType.replace(/-/g, ' ')} has been issued.`);
+            window.speechSynthesis.speak(msg);
+        }
+
+        // Automatically locate the user upon page load
+        window.onload = () => locateUser();
     </script>
 </body>
 </html>
+
 
 
