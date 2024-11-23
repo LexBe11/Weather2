@@ -52,155 +52,148 @@
                 <option value="lightest-rain">Lightest Rain (Light Green)</option>
                 <option value="unknown">Unknown Weather Statement (Gray)</option>
             </select>
-            <input type="number" id="expiration-time" placeholder="Time to expire (hours)" />
-            <button onclick="setAddingPolygon(true)">Select Location</button>
             <button onclick="addPolygon()">Add Polygon</button>
-            <button onclick="deleteLastPolygon()">Delete Last Polygon</button>
+            <label for="polygon-size">Polygon Size:</label>
+            <input type="number" id="polygon-size" value="10" min="1" max="50" />
         </div>
     </div>
 
     <script>
-        const map = L.map('map').setView([39.8283, -98.5795], 5); // Center on the U.S.
+        var map = L.map('map').setView([39.8283, -98.5795], 5);  // Center on the U.S.
+        var polygons = {};  // To store the polygons
+        var ttsPlayed = {};  // Track which polygons have triggered TTS
+        var password = "weather123";  // Example password for authentication
+        var polygonExpirationTime = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
-        // Add base map layer
+        // Initialize map with OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Colors for different weather types
-        const weatherColors = {
-            'tornado': 'red',
-            'pds-tornado': 'pink',
-            'hail-core': 'pink',
-            'heavy-rain': 'red',
-            'flash-flood': 'blue',
-            'coastal-flood': 'teal',
-            'freeze': 'lightblue',
-            'heat-wave': 'orange',
-            'intense-rain': 'orange',
-            'moderate-rain': 'yellow',
-            'light-rain': 'green',
-            'lightest-rain': 'lightgreen',
-            'unknown': 'gray'
-        };
-
-        const polygons = []; // Store all polygons for global visibility
-        let addingPolygon = false; // Flag to track if polygon creation is active
-        let currentClickLocation = null; // Store the last click location for polygon creation
-        let ttsAlreadySpoken = false; // To track whether TTS has been spoken to avoid repetition
-
-        // Password validation for control panel access
+        // Validate password
         function validatePassword() {
-            const password = document.getElementById('password').value;
-            if (password === "weather123") {
-                alert("Access granted!");
+            var enteredPassword = document.getElementById('password').value;
+            if (enteredPassword === password) {
                 document.getElementById('alert-controls').style.display = 'block';
+                alert('Password correct! You can now place alerts.');
             } else {
-                alert("Invalid password!");
+                alert('Incorrect password!');
             }
         }
 
-        // Set adding polygon mode on
-        function setAddingPolygon(value) {
-            addingPolygon = value;
-            if (addingPolygon) {
-                alert("Click on the map to select the location for the polygon.");
-            }
-        }
-
-        // Add polygon to map
+        // Add a polygon to the map
         function addPolygon() {
-            if (!currentClickLocation) {
-                alert("Please click a location on the map first.");
-                return;
+            var alertType = document.getElementById('alert-type').value;
+            var polygonSize = parseInt(document.getElementById('polygon-size').value);
+            
+            // Generate random coordinates for the polygon placement
+            var centerLat = map.getCenter().lat;
+            var centerLng = map.getCenter().lng;
+            var points = [];
+
+            for (let i = 0; i < 5; i++) {
+                var angle = (i * Math.PI * 2) / 5;
+                var latOffset = Math.sin(angle) * polygonSize;
+                var lngOffset = Math.cos(angle) * polygonSize;
+                points.push([centerLat + latOffset, centerLng + lngOffset]);
             }
 
-            const alertType = document.getElementById('alert-type').value;
-            const color = weatherColors[alertType] || 'gray';
-            const expirationTime = document.getElementById('expiration-time').value || 3; // Default to 3 hours
+            var polygon = L.polygon(points, { color: getColor(alertType) }).addTo(map);
 
-            // Adjust the size of the polygon based on alert type
-            let radius = 0.05; // Default size
+            // Add label for polygon
+            L.marker([centerLat, centerLng])
+                .bindPopup(getLabel(alertType))
+                .addTo(map);
+
+            // Add polygon to the store
+            polygons[polygon._leaflet_id] = {
+                polygon: polygon,
+                createdAt: new Date(),
+                alertType: alertType
+            };
+
+            // Set expiration timer
+            setTimeout(function() {
+                if (polygons[polygon._leaflet_id]) {
+                    polygons[polygon._leaflet_id].polygon.remove();
+                    delete polygons[polygon._leaflet_id];
+                }
+            }, polygonExpirationTime);
+
+            // Prevent TTS spamming
+            if (!ttsPlayed[alertType]) {
+                alert(getLabel(alertType) + " alert issued!");
+                ttsPlayed[alertType] = true;
+            }
+        }
+
+        // Helper to get the color of the polygon based on alert type
+        function getColor(alertType) {
             switch (alertType) {
                 case 'tornado':
-                    radius = 0.1; // Larger for tornadoes
-                    break;
+                    return 'red';
                 case 'pds-tornado':
-                    radius = 0.15; // Even larger for PDS tornadoes
-                    break;
+                    return 'pink';
                 case 'hail-core':
-                    radius = 0.02; // Smaller for hail core
-                    break;
+                    return 'pink';
                 case 'heavy-rain':
-                    radius = 0.1;
-                    break;
-                // Add more cases as needed
-            }
-
-            // Create a circle for the polygon at the clicked position
-            const polygon = L.circle(currentClickLocation, { 
-                radius: radius * 100000, // Scale radius for visual effect
-                color: color, 
-                fillColor: color, 
-                fillOpacity: 0.5
-            }).addTo(map);
-            polygons.push(polygon);
-
-            // Add a label to the polygon
-            const label = L.marker(currentClickLocation, {
-                icon: L.divIcon({
-                    className: 'polygon-label',
-                    html: `<span>${alertType.replace(/-/g, ' ').toUpperCase()}</span>`
-                })
-            }).addTo(map);
-
-            // Announce weather alert with TTS, only if not already spoken
-            if (!ttsAlreadySpoken) {
-                announceAlert(alertType);
-                ttsAlreadySpoken = true;
-            }
-
-            // Set expiration time for polygon if specified
-            const expirationDate = new Date().getTime() + expirationTime * 3600000; // Convert hours to milliseconds
-            setTimeout(() => {
-                map.removeLayer(polygon);
-                map.removeLayer(label);
-                alert(`${alertType.replace(/-/g, ' ')} polygon has expired and been removed.`);
-            }, expirationTime * 3600000); // Convert hours to milliseconds
-
-            // Reset the adding polygon flag and location
-            addingPolygon = false;
-            currentClickLocation = null;
-        }
-
-        // Delete the last polygon added
-        function deleteLastPolygon() {
-            if (polygons.length > 0) {
-                const lastPolygon = polygons.pop();
-                map.removeLayer(lastPolygon);
-                alert("Last polygon has been deleted.");
-            } else {
-                alert("No polygons to delete.");
+                    return 'red';
+                case 'flash-flood':
+                    return 'blue';
+                case 'coastal-flood':
+                    return 'teal';
+                case 'freeze':
+                    return 'lightblue';
+                case 'heat-wave':
+                    return 'orange';
+                case 'intense-rain':
+                    return 'orange';
+                case 'moderate-rain':
+                    return 'yellow';
+                case 'light-rain':
+                    return 'green';
+                case 'lightest-rain':
+                    return 'lightgreen';
+                case 'unknown':
+                    return 'gray';
+                default:
+                    return 'gray';
             }
         }
 
-        // Text-to-speech announcement
-        function announceAlert(alertType) {
-            const msg = new SpeechSynthesisUtterance(`A ${alertType.replace(/-/g, ' ')} has been issued.`);
-            window.speechSynthesis.speak(msg);
-        }
-
-        // Add click listener to map to choose the location for the polygon
-        map.on('click', function(e) {
-            if (addingPolygon) {
-                currentClickLocation = e.latlng;
-                alert("Location selected. Now click 'Add Polygon' to place it.");
+        // Helper to get the label for the polygon based on alert type
+        function getLabel(alertType) {
+            switch (alertType) {
+                case 'tornado':
+                    return 'Tornado Warning';
+                case 'pds-tornado':
+                    return 'PDS Tornado Warning';
+                case 'hail-core':
+                    return 'Hail Core';
+                case 'heavy-rain':
+                    return 'Heavy Rain Warning';
+                case 'flash-flood':
+                    return 'Flash Flood Warning';
+                case 'coastal-flood':
+                    return 'Coastal Flood Warning';
+                case 'freeze':
+                    return 'Freeze Alert';
+                case 'heat-wave':
+                    return 'Heat Wave Alert';
+                case 'intense-rain':
+                    return 'Intense Rain';
+                case 'moderate-rain':
+                    return 'Moderate Rain';
+                case 'light-rain':
+                    return 'Light Rain';
+                case 'lightest-rain':
+                    return 'Lightest Rain';
+                case 'unknown':
+                    return 'Unknown Weather Statement';
+                default:
+                    return 'Unknown Alert';
             }
-        });
+        }
     </script>
 </body>
 </html>
-
-
-
-
