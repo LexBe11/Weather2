@@ -46,12 +46,13 @@
                 <option value="coastal-flood">Coastal Flood Warning (Teal)</option>
                 <option value="freeze">Freeze Alert (Light Blue)</option>
                 <option value="heat-wave">Heat Wave Alert (Orange)</option>
-                <option value="thunderstorm-watch">Thunderstorm Watch (Yellow)</option>
-                <option value="thunderstorm-warning">Thunderstorm Warning (Red)</option>
+                <option value="intense-rain">Intense Rain (Orange)</option>
+                <option value="moderate-rain">Moderate Rain (Yellow)</option>
+                <option value="light-rain">Light Rain (Green)</option>
+                <option value="lightest-rain">Lightest Rain (Light Green)</option>
+                <option value="extreme-rain">Extreme Rain Warning (Dark Purple)</option> <!-- Added Extreme Rain -->
+                <option value="unknown">Unknown Weather Statement (Gray)</option>
             </select>
-            <br>
-            <label for="tts-message">TTS Message:</label>
-            <input type="text" id="tts-message" placeholder="Enter TTS message" />
             <button onclick="addPolygon()">Add Polygon</button>
             <label for="polygon-size">Polygon Size:</label>
             <input type="number" id="polygon-size" value="10" min="1" max="50" />
@@ -85,7 +86,6 @@
         function addPolygon() {
             var alertType = document.getElementById('alert-type').value;
             var polygonSize = parseInt(document.getElementById('polygon-size').value);
-            var ttsMessage = document.getElementById('tts-message').value || "Weather alert issued!";
             
             // Generate random coordinates for the polygon placement
             var centerLat = map.getCenter().lat;
@@ -118,7 +118,6 @@
                 if (polygons[polygon._leaflet_id]) {
                     polygons[polygon._leaflet_id].polygon.remove();
                     delete polygons[polygon._leaflet_id];
-                    alert("Polygon has expired and was removed!");
                 }
             }, polygonExpirationTime);
 
@@ -127,9 +126,6 @@
                 alert(getLabel(alertType) + " alert issued!");
                 ttsPlayed[alertType] = true;
             }
-
-            // Send TTS message
-            speakMessage(ttsMessage);
         }
 
         // Helper to get the color of the polygon based on alert type
@@ -151,10 +147,18 @@
                     return 'lightblue';
                 case 'heat-wave':
                     return 'orange';
-                case 'thunderstorm-watch':
+                case 'intense-rain':
+                    return 'orange';
+                case 'moderate-rain':
                     return 'yellow';
-                case 'thunderstorm-warning':
-                    return 'red';
+                case 'light-rain':
+                    return 'green';
+                case 'lightest-rain':
+                    return 'lightgreen';
+                case 'extreme-rain':  // Color for Extreme Rain
+                    return 'darkviolet';
+                case 'unknown':
+                    return 'gray';
                 default:
                     return 'gray';
             }
@@ -179,19 +183,21 @@
                     return 'Freeze Alert';
                 case 'heat-wave':
                     return 'Heat Wave Alert';
-                case 'thunderstorm-watch':
-                    return 'Thunderstorm Watch';
-                case 'thunderstorm-warning':
-                    return 'Thunderstorm Warning';
+                case 'intense-rain':
+                    return 'Intense Rain';
+                case 'moderate-rain':
+                    return 'Moderate Rain';
+                case 'light-rain':
+                    return 'Light Rain';
+                case 'lightest-rain':
+                    return 'Lightest Rain';
+                case 'extreme-rain':  // Label for Extreme Rain
+                    return 'Extreme Rain Warning';
+                case 'unknown':
+                    return 'Unknown Weather Statement';
                 default:
                     return 'Unknown Alert';
             }
-        }
-
-        // Function to handle Text-to-Speech
-        function speakMessage(message) {
-            var utterance = new SpeechSynthesisUtterance(message);
-            speechSynthesis.speak(utterance);
         }
     </script>
 </body>
